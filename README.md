@@ -1,5 +1,7 @@
 # AnyQuery
 
+![AnyQuery system design](docs/assets/anyquery-system-design.png)
+
 AnyQuery is a Coral-native data assistant prototype. It is intentionally wired to real Coral only:
 
 - Ask with read-only SQL immediately.
