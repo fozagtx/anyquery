@@ -16,14 +16,20 @@
     "verify": "npm run lint && npm test && npm run build"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.0",
     "@vitejs/plugin-react": "^5.1.1",
+    "clsx": "^2.1.1",
     "concurrently": "^9.2.1",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "lucide-react": "^0.561.0",
+    "motion": "^12.40.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "recharts": "^3.6.0",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.0",
     "tsx": "^4.21.0",
     "zod": "^4.1.13"
   },

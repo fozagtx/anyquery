@@ -175,19 +175,19 @@ describe("API with real Coral", () => {
     expect(body.message).toContain("empty");
   });
 
-  it("refuses natural language when no model provider is configured", async () => {
-    const previous = process.env.OPENAI_API_KEY;
-    delete process.env.OPENAI_API_KEY;
+  it("refuses natural language when AIsa is not configured", async () => {
+    const previous = process.env.AISA_API_KEY;
+    delete process.env.AISA_API_KEY;
     const response = await fetch(`${baseUrl}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "Show me tables", privacyMode: "summaries" })
     });
     const body = await response.json();
-    process.env.OPENAI_API_KEY = previous;
+    process.env.AISA_API_KEY = previous;
 
     expect(response.status).toBe(422);
-    expect(body.error).toContain("OPENAI_API_KEY");
+    expect(body.error).toContain("AISA_API_KEY");
   });
 
   it("validates unsafe SQL", async () => {

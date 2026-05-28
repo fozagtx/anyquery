@@ -3,7 +3,7 @@
 AnyQuery is a Coral-native data assistant prototype. It is intentionally wired to real Coral only:
 
 - Ask with read-only SQL immediately.
-- Generate SQL from natural language only when a model provider is configured.
+- Generate SQL from natural language only when AIsa is configured.
 - Validate SQL before execution.
 - Execute through `coral sql`.
 - Return an answer, result table, chart recommendation, and provenance from the real Coral response.
@@ -11,6 +11,7 @@ AnyQuery is a Coral-native data assistant prototype. It is intentionally wired t
 - Install bundled Coral sources by passing required inputs directly to `coral source add`.
 - Lint and install custom source specs through `coral source lint` and `coral source add --file`.
 - Save questions, create report schedules, and investigate saved metrics.
+- Use Kokonut UI components for the primary command/search and toolbar surfaces.
 
 ## Requirements
 
@@ -64,11 +65,25 @@ coral source list
 
 The app also exposes this flow in the source inspector. Required source inputs are read from `coral source info -v`; submitted values are passed to the Coral subprocess and are not stored in `data/app-state.json`.
 
-Natural-language prompts require a model provider:
+Natural-language prompts use AIsa's chat completions endpoint. Configure an AIsa key before starting the app:
 
 ```bash
-OPENAI_API_KEY=... npm run dev
+AISA_API_KEY=... npm run dev
 ```
+
+Or put it in a local `.env` file:
+
+```bash
+AISA_API_KEY=...
+AISA_MODEL=gpt-4.1-mini
+AISA_BASE_URL=https://api.aisa.one/v1
+```
+
+The default AIsa model is `gpt-4.1-mini`. Override it with `AISA_MODEL=gpt-4.1` or another AIsa-supported model ID. The default base URL is `https://api.aisa.one/v1`; override it with `AISA_BASE_URL` if needed.
+
+## UI Components
+
+Kokonut UI is configured through `components.json` with the `@kokonutui` registry namespace. Tailwind CSS v4 is wired through Vite, and local Kokonut-derived components live in `src/components/kokonutui`.
 
 ## Verify
 

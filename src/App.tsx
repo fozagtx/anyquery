@@ -10,7 +10,6 @@ import {
   Loader2,
   RefreshCcw,
   Save,
-  Send,
   ShieldCheck,
   Table2,
   Terminal
@@ -29,6 +28,8 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import ActionSearchBar, { type ActionSearchAction } from "./components/kokonutui/action-search-bar";
+import Toolbar from "./components/kokonutui/toolbar";
 import { api } from "./lib/api";
 import type {
   CatalogTable,
@@ -110,6 +111,18 @@ export default function App() {
   const installedSourceCount = useMemo(
     () => sources.filter((source) => source.status === "installed").length,
     [sources]
+  );
+  const queryActions = useMemo<ActionSearchAction[]>(
+    () =>
+      sqlExamples.map((example) => ({
+        id: example.label.toLowerCase().replace(/\s+/g, "-"),
+        label: example.label,
+        description: example.description,
+        icon: <Table2 className="h-4 w-4" />,
+        end: "SQL",
+        value: example.sql
+      })),
+    []
   );
 
   async function refreshWorkspace() {
@@ -331,7 +344,7 @@ export default function App() {
           <div>
             <p className="eyebrow">Coral-native data assistant</p>
             <h2>{currentThread?.title ?? "Ask across connected sources"}</h2>
-            <p className="topbar-copy">Run read-only SQL through real Coral. Natural-language SQL generation requires OPENAI_API_KEY.</p>
+            <p className="topbar-copy">Run read-only SQL through real Coral. Natural-language SQL generation uses AIsa with AISA_API_KEY.</p>
           </div>
           <div className="status-pills">
             <span className={health?.coral.mode === "coral" ? "pill success" : "pill warn"}>
@@ -344,9 +357,24 @@ export default function App() {
             </span>
             <span className="pill info">
               <KeyRound size={14} />
-              NL needs key
+              AIsa SQL
             </span>
           </div>
+          <Toolbar
+            activeColor="text-teal-700"
+            className="kokonut-toolbar"
+            defaultSelected="query"
+            items={[
+              { id: "query", title: "Query", icon: Terminal },
+              { id: "sources", title: "Sources", icon: Database },
+              {
+                id: "privacy",
+                title: privacyModes.find((mode) => mode.value === privacyMode)?.label ?? "Privacy",
+                icon: ShieldCheck
+              },
+              { id: "reports", title: "Reports", icon: CalendarClock }
+            ]}
+          />
         </header>
 
         <section className="chat-surface">
@@ -384,35 +412,25 @@ export default function App() {
           <div className="composer-guidance">
             <div>
               <strong>SQL examples</strong>
-              <p>These run directly with Coral. Plain-language questions work only when the API server has OPENAI_API_KEY.</p>
+              <p>These run directly with Coral. Plain-language questions work only when the API server has AISA_API_KEY.</p>
             </div>
             <Terminal size={18} aria-hidden="true" />
           </div>
-          <div className="chips sql-examples">
-            {sqlExamples.map((example) => (
-              <button key={example.sql} type="button" onClick={() => void submitPrompt(example.sql)}>
-                <span>{example.label}</span>
-                <small>{example.description}</small>
-                <code>{example.sql}</code>
-              </button>
-            ))}
-          </div>
           <div className="composer-row">
-            <label className="sr-only" htmlFor="query-composer">
-              SQL query or natural-language prompt
-            </label>
-            <textarea
-              id="query-composer"
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void submitPrompt();
+            <ActionSearchBar
+              actions={queryActions}
+              disabled={loading}
+              footer="Pick a Coral SQL example or press Enter to run"
+              label="SQL query or AIsa prompt"
+              onActionSelect={(action) => {
+                if (action.value) {
+                  void submitPrompt(action.value);
                 }
               }}
-              placeholder="Paste SELECT/WITH SQL. Natural-language prompts require OPENAI_API_KEY."
-              spellCheck={false}
+              onChange={setPrompt}
+              onSubmit={(value) => void submitPrompt(value)}
+              placeholder="Paste SELECT/WITH SQL. Natural-language prompts require AISA_API_KEY."
+              value={prompt}
             />
             <div className="composer-actions">
               <select
@@ -426,15 +444,6 @@ export default function App() {
                   </option>
                 ))}
               </select>
-              <button
-                className="primary-button"
-                type="button"
-                aria-label="Run query"
-                onClick={() => void submitPrompt()}
-                disabled={loading}
-              >
-                {loading ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
-              </button>
             </div>
           </div>
         </section>
@@ -491,7 +500,7 @@ function FirstRunEmptyState({
     : !coralReady
       ? "Install Coral and make sure the coral command is on PATH. AnyQuery requires real Coral source data."
       : hasConfiguredSources
-        ? "Use an example or write read-only SQL against the live catalog. Natural language requires OPENAI_API_KEY."
+        ? "Use an example or write read-only SQL against the live catalog. Natural language requires AISA_API_KEY."
         : "Start with Coral metadata SQL, then install a bundled source or custom source spec in the Sources panel.";
 
   return (
@@ -526,13 +535,13 @@ function FirstRunEmptyState({
 }
 
 function QueryErrorBanner({ message }: { message: string }) {
-  const isModelKeyError = message.includes("OPENAI_API_KEY");
+  const isModelKeyError = message.includes("AISA_API_KEY");
 
   return (
     <div className="error-banner" role="alert">
       <AlertCircle size={18} aria-hidden="true" />
       <div>
-        <strong>{isModelKeyError ? "Natural language needs OPENAI_API_KEY" : "Query did not run"}</strong>
+        <strong>{isModelKeyError ? "Natural language needs AISA_API_KEY" : "Query did not run"}</strong>
         <p>{message}</p>
       </div>
     </div>
@@ -921,7 +930,7 @@ function formatQueryError(error: unknown, message: string): string {
   const raw = error instanceof Error ? error.message : "Query failed";
 
   if (!isSqlLike(message) && raw === "Request failed: 422") {
-    return "Natural-language SQL generation requires OPENAI_API_KEY. Enter a SELECT/WITH SQL query or restart the API server with OPENAI_API_KEY.";
+    return "Natural-language SQL generation requires AISA_API_KEY. Enter a SELECT/WITH SQL query or restart the API server with AISA_API_KEY.";
   }
 
   return raw;

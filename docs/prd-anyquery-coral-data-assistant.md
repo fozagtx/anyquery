@@ -97,7 +97,7 @@ The first release should feel like a data analyst sitting inside a secure worksp
 43. As a developer, I want OpenTelemetry correlation between AnyQuery requests and Coral queries, so that slow or failing workflows can be traced end to end.
 44. As a user, I want streaming progress states such as discovering schema, writing query, running query, and summarizing result, so that long tasks feel understandable.
 45. As a user, I want to cancel a running query, so that I can stop accidental or slow work.
-46. As an admin, I want environment-based configuration for Coral paths, model providers, storage, and delivery services, so that deployments are repeatable.
+46. As an admin, I want environment-based configuration for Coral paths, AIsa settings, storage, and delivery services, so that deployments are repeatable.
 47. As a self-hosted customer, I want a simple local deployment path, so that I can run the assistant inside my infrastructure.
 48. As a future team customer, I want a path to shared workspaces, role-based access, and source sharing, so that the product can scale beyond one user.
 49. As a new user, I want onboarding to confirm Coral is installed and has at least one source, so that I can ask my first question quickly.

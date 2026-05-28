@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   color-scheme: light;
   font-family:
@@ -175,6 +177,14 @@ input:focus-visible {
   border-bottom: 1px solid var(--line);
   padding: 18px 22px;
   background: rgb(247 245 239 / 0.84);
+}
+
+.topbar > div:first-child {
+  min-width: 260px;
+}
+
+.kokonut-toolbar {
+  flex-shrink: 0;
 }
 
 .topbar h2 {
@@ -586,7 +596,12 @@ pre {
 .composer-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 10px;
+}
+
+.kokonut-action-search {
+  min-width: 0;
 }
 
 textarea {
