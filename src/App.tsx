@@ -1,36 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Activity,
-  AlertCircle,
   CalendarClock,
-  Clipboard,
   Database,
   KeyRound,
-  LineChart,
-  Loader2,
-  RefreshCcw,
-  Save,
   ShieldCheck,
   Table2,
   Terminal
 } from "lucide-react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart as ReLineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
 import ActionSearchBar, { type ActionSearchAction } from "./components/kokonutui/action-search-bar";
 import Toolbar from "./components/kokonutui/toolbar";
+import { Sidebar } from "./components/Sidebar";
+import { AnswerView, QueryErrorBanner, ProgressSteps } from "./components/AnswerView";
+import { SourceInspector, MetricPanel, InvestigationView } from "./components/SourceInspector";
+import { EmptyState } from "./components/EmptyState";
 import { api } from "./lib/api";
+import { getSuggestions } from "./lib/suggestions";
 import type {
   CatalogTable,
   ChatResponse,
@@ -42,33 +26,9 @@ import type {
   Schedule,
   SourceActionResult,
   SourceInfo,
-  SourceStatus,
   SourceSummary,
   Thread
 } from "../shared/types";
-
-const sqlExamples = [
-  {
-    label: "Show tables",
-    description: "See what Coral exposes right now.",
-    sql: "SHOW TABLES"
-  },
-  {
-    label: "List catalog",
-    description: "Inspect schemas and table types.",
-    sql: "SELECT table_schema, table_name, table_type FROM information_schema.tables ORDER BY table_schema, table_name LIMIT 50"
-  },
-  {
-    label: "Count by schema",
-    description: "Check source coverage without reading rows.",
-    sql: "SELECT table_schema, COUNT(*) AS tables FROM information_schema.tables GROUP BY table_schema ORDER BY table_schema"
-  },
-  {
-    label: "Required inputs",
-    description: "Review Coral source input metadata.",
-    sql: "SELECT * FROM coral.inputs LIMIT 20"
-  }
-];
 
 const privacyModes: Array<{ value: PrivacyMode; label: string }> = [
   { value: "summaries", label: "Summaries" },
@@ -99,10 +59,23 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [activeThreadId, setActiveThreadId] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("anyquery-theme");
+      if (stored) return stored === "dark";
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    return false;
+  });
 
   useEffect(() => {
     void refreshWorkspace();
   }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+    localStorage.setItem("anyquery-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   const currentThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId) ?? threads[0],
@@ -112,17 +85,18 @@ export default function App() {
     () => sources.filter((source) => source.status === "installed").length,
     [sources]
   );
+  const suggestions = useMemo(() => getSuggestions(sources), [sources]);
   const queryActions = useMemo<ActionSearchAction[]>(
     () =>
-      sqlExamples.map((example) => ({
-        id: example.label.toLowerCase().replace(/\s+/g, "-"),
-        label: example.label,
-        description: example.description,
+      suggestions.slice(0, 8).map((s) => ({
+        id: s.label.toLowerCase().replace(/\s+/g, "-"),
+        label: s.label,
+        description: s.description,
         icon: <Table2 className="h-4 w-4" />,
-        end: "SQL",
-        value: example.sql
+        end: s.category === "cross-source" ? "JOIN" : "SQL",
+        value: s.sql
       })),
-    []
+    [suggestions]
   );
 
   async function refreshWorkspace() {
@@ -281,63 +255,17 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <aside className="sidebar" aria-label="Workspace">
-        <div className="brand">
-          <div className="brand-mark">AQ</div>
-          <div>
-            <h1>AnyQuery</h1>
-            <p>{health?.coral.mode === "coral" ? "Coral live" : "Coral required"}</p>
-          </div>
-        </div>
-
-        <section className="panel compact">
-          <div className="panel-title">
-            <Activity size={16} />
-            <span>Threads</span>
-          </div>
-          <div className="thread-list">
-            {threads.length === 0 ? <span className="muted">No threads yet</span> : null}
-            {threads.slice(0, 6).map((thread) => (
-              <button
-                className={thread.id === currentThread?.id ? "thread active" : "thread"}
-                key={thread.id}
-                onClick={() => setActiveThreadId(thread.id)}
-              >
-                <span>{thread.title}</span>
-                <small>{thread.messages.length} messages</small>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="panel compact">
-          <div className="panel-title">
-            <Save size={16} />
-            <span>Saved</span>
-          </div>
-          {savedQuestions.slice(0, 4).map((saved) => (
-            <button className="saved-item" key={saved.id} onClick={() => void submitPrompt(saved.prompt, true)}>
-              {saved.title}
-            </button>
-          ))}
-        </section>
-
-        <section className="panel compact">
-          <div className="panel-title">
-            <CalendarClock size={16} />
-            <span>Reports</span>
-          </div>
-          {schedules.slice(0, 3).map((schedule) => (
-            <div className="report-item" key={schedule.id}>
-              <strong>{schedule.frequency}</strong>
-              <span>{schedule.destination}</span>
-            </div>
-          ))}
-          <button className="secondary-button" onClick={() => void scheduleFirstSavedQuestion()}>
-            Add weekly
-          </button>
-        </section>
-      </aside>
+      <Sidebar
+        threads={threads}
+        currentThreadId={currentThread?.id}
+        savedQuestions={savedQuestions}
+        schedules={schedules}
+        darkMode={darkMode}
+        onSelectThread={setActiveThreadId}
+        onRunSaved={(p) => void submitPrompt(p, true)}
+        onSchedule={() => void scheduleFirstSavedQuestion()}
+        onToggleDarkMode={() => setDarkMode((d) => !d)}
+      />
 
       <section className="workspace">
         <header className="topbar">
@@ -386,10 +314,11 @@ export default function App() {
               </article>
             ))
           ) : (
-            <FirstRunEmptyState
+            <EmptyState
               health={health}
               installedSourceCount={installedSourceCount}
               catalogCount={catalog.length}
+              suggestions={suggestions}
               onRunExample={(sql) => void submitPrompt(sql)}
             />
           )}
@@ -475,452 +404,6 @@ export default function App() {
   );
 }
 
-function FirstRunEmptyState({
-  health,
-  installedSourceCount,
-  catalogCount,
-  onRunExample
-}: {
-  health: HealthResponse | null;
-  installedSourceCount: number;
-  catalogCount: number;
-  onRunExample: (sql: string) => void;
-}) {
-  const coralReady = health?.coral.mode === "coral";
-  const hasConfiguredSources = installedSourceCount > 0;
-  const title = !health
-    ? "Checking Coral"
-    : !coralReady
-      ? "Coral CLI is required"
-      : hasConfiguredSources
-        ? "Ask Coral with SQL"
-        : "No Coral sources configured yet";
-  const description = !health
-    ? "The app is checking the local Coral CLI before it can run a query."
-    : !coralReady
-      ? "Install Coral and make sure the coral command is on PATH. AnyQuery requires real Coral source data."
-      : hasConfiguredSources
-        ? "Use an example or write read-only SQL against the live catalog. Natural language requires AISA_API_KEY."
-        : "Start with Coral metadata SQL, then install a bundled source or custom source spec in the Sources panel.";
-
-  return (
-    <div className="empty-state">
-      <div className="empty-icon">
-        <LineChart size={30} aria-hidden="true" />
-      </div>
-      <div className="empty-copy">
-        <strong>{title}</strong>
-        <p>{description}</p>
-      </div>
-      <div className="empty-facts">
-        <span>{installedSourceCount} installed sources</span>
-        <span>{catalogCount} catalog tables</span>
-        <span>SQL first</span>
-      </div>
-      <div className="empty-examples" aria-label="Runnable SQL examples">
-        {sqlExamples.slice(0, 3).map((example) => (
-          <button
-            key={example.sql}
-            type="button"
-            disabled={!coralReady}
-            onClick={() => onRunExample(example.sql)}
-          >
-            <span>{example.label}</span>
-            <code>{example.sql}</code>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function QueryErrorBanner({ message }: { message: string }) {
-  const isModelKeyError = message.includes("AISA_API_KEY");
-
-  return (
-    <div className="error-banner" role="alert">
-      <AlertCircle size={18} aria-hidden="true" />
-      <div>
-        <strong>{isModelKeyError ? "Natural language needs AISA_API_KEY" : "Query did not run"}</strong>
-        <p>{message}</p>
-      </div>
-    </div>
-  );
-}
-
-function ProgressSteps() {
-  const steps = ["Discovering catalog", "Writing SQL", "Validating safety", "Running Coral", "Summarizing"];
-  return (
-    <div className="progress-steps">
-      {steps.map((step) => (
-        <span key={step}>
-          <Loader2 className="spin" size={14} />
-          {step}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function AnswerView({
-  run,
-  onRefresh,
-  onSave
-}: {
-  run: ChatResponse;
-  onRefresh: () => void;
-  onSave: () => void;
-}) {
-  return (
-    <article className="answer-card">
-      <div className="answer-header">
-        <div>
-          <p className="eyebrow">Answer</p>
-          <h3>{run.answer}</h3>
-        </div>
-        <div className="icon-row">
-          <button type="button" title="Refresh" aria-label="Refresh answer" onClick={onRefresh}>
-            <RefreshCcw size={17} />
-          </button>
-          <button type="button" title="Save" aria-label="Save question" onClick={onSave}>
-            <Save size={17} />
-          </button>
-        </div>
-      </div>
-
-      <div className="provenance">
-        <span>{run.provenance.cache}</span>
-        <span>{run.provenance.rowCount} rows</span>
-        <span>{run.provenance.executionMs} ms</span>
-        <span>{run.provenance.sources.join(", ")}</span>
-      </div>
-
-      <SqlPanel sql={run.sql} />
-      <ResultTable run={run} />
-      {run.chart ? <ResultChart run={run} /> : null}
-    </article>
-  );
-}
-
-function SqlPanel({ sql }: { sql: string }) {
-  async function copySql() {
-    await navigator.clipboard?.writeText(sql);
-  }
-
-  return (
-    <section className="sql-panel">
-      <div className="section-title">
-        <Table2 size={16} />
-        <span>SQL</span>
-        <button type="button" title="Copy SQL" aria-label="Copy SQL" onClick={() => void copySql()}>
-          <Clipboard size={15} />
-        </button>
-      </div>
-      <pre>{sql}</pre>
-    </section>
-  );
-}
-
-function ResultTable({ run }: { run: ChatResponse }) {
-  return (
-    <section className="result-table-wrap">
-      <table className="result-table">
-        <thead>
-          <tr>
-            {run.columns.map((column) => (
-              <th key={column}>{column}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {run.rows.map((row, index) => (
-            <tr key={index}>
-              {run.columns.map((column) => (
-                <td key={column}>{String(row[column] ?? "")}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function ResultChart({ run }: { run: ChatResponse }) {
-  const chart = run.chart;
-  if (!chart) return null;
-
-  return (
-    <section className="chart-panel">
-      <div className="section-title">
-        <LineChart size={16} />
-        <span>{chart.type} chart</span>
-      </div>
-      <div className="chart-frame">
-        <ResponsiveContainer width="100%" height={240}>
-          {chart.type === "line" ? (
-            <ReLineChart data={run.rows}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={chart.xKey} />
-              <YAxis />
-              <Tooltip />
-              <Line dataKey={chart.yKey} stroke="#0f766e" strokeWidth={3} dot={{ r: 3 }} />
-            </ReLineChart>
-          ) : chart.type === "donut" ? (
-            <PieChart>
-              <Tooltip />
-              <Pie data={run.rows} dataKey={chart.yKey} nameKey={chart.xKey} innerRadius={58} outerRadius={92}>
-                {run.rows.map((_row, index) => (
-                  <Cell key={index} fill={["#0f766e", "#2563eb", "#b7791f", "#697477"][index % 4]} />
-                ))}
-              </Pie>
-            </PieChart>
-          ) : (
-            <BarChart data={run.rows}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={chart.xKey} />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey={chart.yKey} fill="#0f766e" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          )}
-        </ResponsiveContainer>
-      </div>
-      <p className="muted">{chart.reason}</p>
-    </section>
-  );
-}
-
-function SourceInspector({
-  coral,
-  sources,
-  catalog,
-  selectedSource,
-  sourceInputs,
-  sourceAction,
-  sourceLoading,
-  onSelectSource,
-  onInputChange,
-  onInstall,
-  onTest,
-  customSourceYaml,
-  customSourceAction,
-  customSourceLoading,
-  onCustomSourceChange,
-  onLintCustomSource,
-  onInstallCustomSource
-}: {
-  coral?: HealthResponse["coral"];
-  sources: SourceSummary[];
-  catalog: CatalogTable[];
-  selectedSource: SourceInfo | null;
-  sourceInputs: Record<string, string>;
-  sourceAction: SourceActionResult | null;
-  sourceLoading: boolean;
-  onSelectSource: (name: string) => void;
-  onInputChange: (key: string, value: string) => void;
-  onInstall: () => void;
-  onTest: () => void;
-  customSourceYaml: string;
-  customSourceAction: SourceActionResult | null;
-  customSourceLoading: boolean;
-  onCustomSourceChange: (value: string) => void;
-  onLintCustomSource: () => void;
-  onInstallCustomSource: () => void;
-}) {
-  const installedSources = sources.filter((source) => source.status === "installed");
-  const installableSources = sources.filter((source) => source.status !== "installed");
-  const coralReady = coral?.mode === "coral";
-  const hasConfiguredSources = installedSources.length > 0;
-
-  return (
-    <section className="panel">
-      <div className="panel-title">
-        <Database size={16} />
-        <span>Sources</span>
-      </div>
-      <div className={hasConfiguredSources ? "source-summary configured" : "source-summary needs-setup"}>
-        <strong>{sourceSummaryTitle(coralReady, hasConfiguredSources, sources.length)}</strong>
-        <p>{sourceSummaryCopy(coralReady, hasConfiguredSources, sources.length)}</p>
-        <div className="source-counts" aria-label="Source counts">
-          <span>{installedSources.length} installed</span>
-          <span>{installableSources.length} available</span>
-        </div>
-      </div>
-      <div className="source-list">
-        {sources.length === 0 ? (
-          <div className="source-empty-callout">
-            <strong>{coralReady ? "No sources returned by Coral" : "Coral is not connected"}</strong>
-            <p>
-              {coralReady
-                ? "Use a real custom source spec below, or check the Coral CLI output with coral source discover."
-                : "Source discovery and installation are disabled until the local Coral CLI is available."}
-            </p>
-          </div>
-        ) : null}
-        {sources.map((source) => (
-          <button
-            className={selectedSource?.id === source.id ? "source-card selected" : "source-card"}
-            key={source.id}
-            type="button"
-            onClick={() => onSelectSource(source.id)}
-          >
-            <div>
-              <strong>{source.name}</strong>
-              <span>{source.description}</span>
-              <em>{sourceStatusDescription(source.status)}</em>
-            </div>
-            <small className={`source-status ${sourceStatusTone(source.status)}`}>{sourceStatusLabel(source.status)}</small>
-          </button>
-        ))}
-      </div>
-      {selectedSource ? (
-        <div className="source-setup" aria-busy={sourceLoading}>
-          <div className="setup-header">
-            <div>
-              <strong>{selectedSource.name}</strong>
-              <span className={`source-status ${sourceStatusTone(selectedSource.status)}`}>
-                {sourceStatusLabel(selectedSource.status)}
-              </span>
-            </div>
-            <button type="button" disabled={sourceLoading || selectedSource.status !== "installed"} onClick={onTest}>
-              {sourceLoading ? "Testing..." : "Test"}
-            </button>
-          </div>
-          <p>{selectedSource.description}</p>
-          <p className="source-status-note">{sourceStatusDescription(selectedSource.status)}</p>
-          {selectedSource.inputs.map((input) => (
-            <label className="source-input" key={input.key}>
-              <span>
-                {input.key}
-                {input.required ? " *" : ""}
-              </span>
-              <input
-                type={input.kind === "secret" ? "password" : "text"}
-                value={sourceInputs[input.key] ?? ""}
-                onChange={(event) => onInputChange(input.key, event.target.value)}
-                placeholder={input.defaultValue ?? input.kind}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              {input.description ? <small>{input.description}</small> : null}
-            </label>
-          ))}
-          <button className="secondary-button" type="button" disabled={sourceLoading} onClick={onInstall}>
-            {sourceLoading ? "Working..." : "Install / update with Coral"}
-          </button>
-          {sourceAction ? (
-            <div className={sourceAction.ok ? "action-message ok" : "action-message error"}>{sourceAction.message}</div>
-          ) : null}
-        </div>
-      ) : null}
-      <div className="catalog-list">
-        <div className="catalog-heading">
-          <strong>Live catalog preview</strong>
-          <span>{catalog.length} tables from information_schema</span>
-        </div>
-        {catalog.length === 0 ? (
-          <div className="catalog-empty">
-            <strong>No catalog tables exposed yet</strong>
-            <span>Run SHOW TABLES or install a Coral source. This list only shows real Coral catalog entries.</span>
-          </div>
-        ) : null}
-        {catalog.slice(0, 6).map((table) => (
-          <div className="catalog-item" key={`${table.schema}.${table.name}`}>
-            <strong>
-              {table.schema}.{table.name}
-            </strong>
-            <span>{table.columns.length} columns</span>
-          </div>
-        ))}
-      </div>
-      <div className="source-setup">
-        <div className="setup-header">
-          <div>
-            <strong>Custom source spec</strong>
-            <span>Runs real Coral lint/install</span>
-          </div>
-        </div>
-        <p>Paste a real Coral source YAML spec. Lint and install call the local Coral CLI.</p>
-        <textarea
-          className="source-yaml"
-          value={customSourceYaml}
-          onChange={(event) => onCustomSourceChange(event.target.value)}
-          placeholder="Paste Coral source YAML"
-          spellCheck={false}
-        />
-        <div className="button-row">
-          <button className="secondary-button" type="button" disabled={customSourceLoading} onClick={onLintCustomSource}>
-            Lint
-          </button>
-          <button className="secondary-button" type="button" disabled={customSourceLoading} onClick={onInstallCustomSource}>
-            Install
-          </button>
-        </div>
-        {customSourceAction ? (
-          <div className={customSourceAction.ok ? "action-message ok" : "action-message error"}>
-            {customSourceAction.message}
-          </div>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-function MetricPanel({
-  metrics,
-  onInvestigate
-}: {
-  metrics: MetricDefinition[];
-  onInvestigate: (id: string) => void;
-}) {
-  return (
-    <section className="panel">
-      <div className="panel-title">
-        <Activity size={16} />
-        <span>Metrics</span>
-      </div>
-      {metrics.map((metric) => (
-        <div className="metric-card" key={metric.id}>
-          <strong>{metric.name}</strong>
-          <span>{metric.description}</span>
-          <button type="button" onClick={() => onInvestigate(metric.id)}>Investigate</button>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function InvestigationView({ investigation }: { investigation: MetricInvestigation }) {
-  return (
-    <article className="answer-card">
-      <div className="answer-header">
-        <div>
-          <p className="eyebrow">Investigation</p>
-          <h3>{investigation.metric.name}</h3>
-          <p>{investigation.summary}</p>
-        </div>
-      </div>
-      <div className="provenance">
-        {Object.entries(investigation.headline).map(([key, value]) => (
-          <span key={key}>
-            {key}: {String(value)}
-          </span>
-        ))}
-      </div>
-      {investigation.breakdowns.map((breakdown) => (
-        <section className="sql-panel" key={breakdown.title}>
-          <div className="section-title">
-            <Table2 size={16} />
-            <span>{breakdown.title}</span>
-          </div>
-          <pre>{breakdown.sql}</pre>
-        </section>
-      ))}
-    </article>
-  );
-}
-
 function isSqlLike(message: string): boolean {
   const trimmed = message.trim();
   return /^(select|with)\b/i.test(trimmed) || /^show\s+(tables|columns|schemas)\b/i.test(trimmed);
@@ -934,52 +417,4 @@ function formatQueryError(error: unknown, message: string): string {
   }
 
   return raw;
-}
-
-function sourceStatusLabel(status: SourceStatus): string {
-  const labels: Record<SourceStatus, string> = {
-    available: "Available",
-    installed: "Installed",
-    unhealthy: "Unhealthy",
-    missing_credentials: "Needs credentials",
-    not_installed: "Not installed"
-  };
-  return labels[status];
-}
-
-function sourceStatusTone(status: SourceStatus): string {
-  if (status === "installed") return "success";
-  if (status === "missing_credentials" || status === "not_installed" || status === "available") return "warn";
-  return "danger";
-}
-
-function sourceStatusDescription(status: SourceStatus): string {
-  const descriptions: Record<SourceStatus, string> = {
-    available: "Available from Coral. Select it, provide required inputs, and install it before querying source tables.",
-    installed: "Installed in Coral. Use Test to confirm connectivity before relying on query results.",
-    unhealthy: "Coral reported a source problem. Test it or update the source configuration.",
-    missing_credentials: "Coral needs credentials before this source can be installed or queried.",
-    not_installed: "Not installed in Coral yet. Install it here with real source credentials."
-  };
-  return descriptions[status];
-}
-
-function sourceSummaryTitle(coralReady: boolean, hasConfiguredSources: boolean, sourceCount: number): string {
-  if (!coralReady) return "Coral required for sources";
-  if (hasConfiguredSources) return "Coral sources configured";
-  if (sourceCount > 0) return "No sources configured";
-  return "No sources discovered";
-}
-
-function sourceSummaryCopy(coralReady: boolean, hasConfiguredSources: boolean, sourceCount: number): string {
-  if (!coralReady) {
-    return "Install Coral and restart the app. Source discovery, install, test, and catalog views use real Coral only.";
-  }
-  if (hasConfiguredSources) {
-    return "Installed sources can be queried through read-only SQL. Status and catalog data come from Coral.";
-  }
-  if (sourceCount > 0) {
-    return "Coral is available, but no source is installed yet. You can still query metadata while installing a real source.";
-  }
-  return "Coral did not return bundled sources. Use a real custom source spec below or inspect the local Coral CLI.";
 }
